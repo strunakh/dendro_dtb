@@ -10,14 +10,14 @@ db_name = "dendro_db"
 
 # Pripojenie na PostgreSQL
 engine = create_engine(
-    f"postgresql+psycopg2://{username}:{password}@localhost:5433/{db_name}"
+    f"postgresql+psycopg2://{username}:{password}@localhost:5432/{db_name}"
 )
 
 
 # IMPORT METADÁT
 def import_dendro_metadata():
 
-    dendro = pd.read_csv("data/dendro_meta.csv", delim_whitespace=True, decimal=",")
+    dendro = pd.read_csv(r"c:\Users\user\OneDrive\Počítač\bp\databáza\data\dendro_meta.csv", delim_whitespace=True, decimal=",")
     
     dendro = dendro.rename(columns={
     "ID": "dendro_id",
@@ -40,7 +40,7 @@ def import_dendro_metadata():
 
 def import_meteo_metadata():
     
-    meteo = pd.read_csv("data/meteo_meta.csv", delim_whitespace=True, decimal=",")
+    meteo = pd.read_csv(r"c:\Users\user\OneDrive\Počítač\bp\databáza\data\meteo_meta.csv", delim_whitespace=True, decimal=",")
     
     meteo = meteo.rename(columns={
     "ID": "meteo_id",
@@ -60,27 +60,49 @@ def import_meteo_metadata():
 
 # 2 DENDRO CLEAN IMPORT
 def import_dendro_clean():
-
     # Low belt
-    files = glob.glob("data/dendro_clean_l/*.txt")
+    files = glob.glob(r"c:\Users\user\OneDrive\Počítač\bp\databáza\data\dendro_clean_l\*.txt")
     for file in files:
-        name = os.path.basename(file) 
-        dendro_id = name[:2]                    # prvé 2 znaky
-        dendro_id = str(int(dendro_id))                 
+        print(f"Reading LOW file: {file}")
+        try:
+            name = os.path.basename(file)
+            dendro_id = str(int(name[:2]))
 
-        df = pd.read_csv(file, sep="\t")
-        df["dendro_id"] = dendro_id
-        df.to_sql("dendro_data", engine, if_exists="append", index=False)
+            df = pd.read_csv(file, sep="\t")
+            df = df.rename(columns={"GRO": "gro"})
+
+            df["dendro_id"] = dendro_id
+            df = df.drop_duplicates(subset=["ts"])
+            df.to_sql("dendro_data", engine, if_exists="append", index=False)
+
+            print(f"Imported: {name}")
+
+        except Exception as e:
+            print(f"ERROR in file: {file}")
+            print(repr(e))
+            raise
 
     # Middle and High belt
-    files = glob.glob("data/dendro_clean_mh/*.txt")
+    files = glob.glob(r"c:\Users\user\OneDrive\Počítač\bp\databáza\data\dendro_clean_mh\*.txt")
     for file in files:
-        name = os.path.basename(file)
-        dendro_id = name[6:8]                # 7. a 8. znak
+        print(f"Reading MH file: {file}")
+        try:
+            name = os.path.basename(file)
+            dendro_id = name[6:8]
 
-        df = pd.read_csv(file, sep="\t")
-        df["dendro_id"] = dendro_id
-        df.to_sql("dendro_data", engine, if_exists="append", index=False)
+            df = pd.read_csv(file, sep="\t")
+            df = df.rename(columns={"GRO": "gro"})
+
+            df["dendro_id"] = dendro_id
+            df = df.drop_duplicates(subset=["ts"])
+            df.to_sql("dendro_data", engine, if_exists="append", index=False)
+
+            print(f"Imported: {name}")
+
+        except Exception as e:
+            print(f"ERROR in file: {file}")
+            print(repr(e))
+            raise
 
     print("Import dendro_data completed")
 
@@ -88,24 +110,34 @@ def import_dendro_clean():
 # 2 METEO IMPORT
 def import_meteo():
 
-    files = glob.glob("data/meteo_spojene/*.txt") 
+    files = glob.glob(r"C:\Users\user\OneDrive\Počítač\bp\databáza\data\meteo_processed\*.txt")
+
     for file in files:
-        name = os.path.basename(file)[:-4]   
-        meteo_id = name                  
+        try:
+            name = os.path.basename(file)[:-4]
+            meteo_id = name
 
-        df = pd.read_csv(file, sep=",", encoding="latin1")
-        df = df.rename(columns={
-            "Time": "ts",
-            "Celsius(°C)": "temp",
-            "Humidity(%rh)": "humidity",
-            "Dew Point(°C)": "dew_point"
-        })
-      
-        df = df[["ts", "temp", "humidity", "dew_point"]]
-        df["meteo_id"] = meteo_id
-        df = df[["meteo_id", "ts", "temp", "humidity", "dew_point"]]
+            df = pd.read_csv(file, sep=",", encoding="latin1")
+            df = df.rename(columns={"Time": "ts"})
 
-        df.to_sql("meteo_data", engine, if_exists="append", index=False)
+            df["ts"] = pd.to_datetime(df["ts"], errors="coerce")
+            df["temp"] = pd.to_numeric(df["temp"], errors="coerce")
+            df["humidity"] = pd.to_numeric(df["humidity"], errors="coerce")
+            df["dew_point"] = pd.to_numeric(df["dew_point"], errors="coerce")
+            df["vpd"] = pd.to_numeric(df["vpd"], errors="coerce")
+
+            print("Importing:", file)
+            print(df.isna().sum())
+
+            df["meteo_id"] = meteo_id
+            df = df[["meteo_id", "ts", "temp", "humidity", "dew_point", "vpd"]]
+
+            df.to_sql("meteo_data", engine, if_exists="append", index=False)
+
+        except Exception as e:
+            print("ERROR in file:", file)
+            print(e)
+            break
 
     print("Import meteo_data completed")
 
